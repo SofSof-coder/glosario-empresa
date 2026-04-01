@@ -2,14 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
 import { getFirestore, collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, query } from 'firebase/firestore';
-import { Search, Plus, Book, Clock, Edit3, Trash2, X, Download, Cloud, Check, Loader2 } from 'lucide-react';
+import { Search, Plus, Book, Clock, Edit3, Trash2, X, Download, Cloud, Check, Loader2, AlertCircle } from 'lucide-react';
 
 // Configuración de Firebase - Proporcionada por el entorno
 const firebaseConfig = JSON.parse(__firebase_config);
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'glosario-empresarial-v1';
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'glosario-v1';
 
 export default function App() {
   const [words, setWords] = useState([]);
@@ -22,7 +22,7 @@ export default function App() {
   const [editingId, setEditingId] = useState(null);
   const [formData, setFormData] = useState({ term: '', definition: '', status: 'defined' });
 
-  // 1. Manejo de Autenticación (Regla 3: Auth antes de consultas)
+  // Manejo de Autenticación
   useEffect(() => {
     const initAuth = async () => {
       try {
@@ -43,11 +43,10 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // 2. Sincronización con Firestore (Regla 1: Rutas estrictas)
+  // Sincronización con Firestore
   useEffect(() => {
     if (!user) return;
 
-    // Usando la ruta obligatoria: /artifacts/{appId}/public/data/{collectionName}
     const q = collection(db, 'artifacts', appId, 'public', 'data', 'vocabulary');
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -65,7 +64,7 @@ export default function App() {
     return () => unsubscribe();
   }, [user]);
 
-  // Filtrado y ordenación en memoria (Regla 2: No consultas complejas)
+  // Filtrado y ordenación
   const filteredWords = words.filter(w => {
     const termMatch = (w.term || '').toLowerCase().includes(searchTerm.toLowerCase());
     const defMatch = (w.definition || '').toLowerCase().includes(searchTerm.toLowerCase());
@@ -78,11 +77,11 @@ export default function App() {
     e.preventDefault();
     if (!formData.term.trim() || !user) return;
 
-    const finalStatus = formData.definition.trim() === '' ? 'pending' : formData.status;
+    const isPending = formData.definition.trim() === '';
     const wordData = { 
       term: formData.term, 
       definition: formData.definition, 
-      status: finalStatus,
+      status: isPending ? 'pending' : 'defined',
       updatedAt: new Date().toISOString()
     };
 
@@ -102,7 +101,7 @@ export default function App() {
   };
 
   const handleDelete = async (id) => {
-    if (!user) return;
+    if (!user || !window.confirm("¿Eliminar este término?")) return;
     try {
       const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'vocabulary', id);
       await deleteDoc(docRef);
@@ -111,143 +110,115 @@ export default function App() {
     }
   };
 
-  const exportToCSV = () => {
-    const headers = ['Palabra', 'Definición', 'Estado'];
-    const rows = words.map(w => [
-      `"${(w.term || '').replace(/"/g, '""')}"`, 
-      `"${(w.definition || '').replace(/"/g, '""')}"`, 
-      w.status
-    ]);
-    const csvContent = [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", "glosario_empresa.csv");
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="text-center">
-          <Loader2 className="w-10 h-10 text-indigo-600 animate-spin mx-auto mb-4" />
-          <p className="text-slate-600 font-medium">Sincronizando glosario corporativo...</p>
-        </div>
+      <div className="min-h-screen flex items-center justify-center bg-emerald-50">
+        <Loader2 className="w-8 h-8 text-emerald-600 animate-spin" />
       </div>
     );
   }
 
+  const pendingCount = words.filter(w => w.status === 'pending').length;
+
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 font-sans pb-20">
-      <header className="bg-indigo-700 text-white shadow-lg py-6 px-4">
-        <div className="max-w-4xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
-          <div className="flex items-center gap-3">
-            <div className="bg-white/20 p-2 rounded-lg">
-              <Book className="w-6 h-6" />
+    <div className="min-h-screen bg-[#f7fdfa] text-slate-800 font-sans pb-20">
+      {/* Header Esmeralda - Descripción eliminada */}
+      <header className="bg-gradient-to-r from-emerald-600 to-teal-700 text-white shadow-xl py-10 px-6 sticky top-0 z-40">
+        <div className="max-w-4xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-6">
+          <div className="flex items-center gap-4 text-left">
+            <div className="bg-white/10 p-3 rounded-2xl backdrop-blur-md border border-white/20">
+              <Book className="w-8 h-8 text-emerald-100 fill-emerald-100/10" />
             </div>
             <div>
-              <h1 className="text-xl font-bold leading-none">Glosario Corporativo</h1>
-              <div className="flex items-center gap-1 text-indigo-200 text-xs mt-1">
-                <Cloud className="w-3 h-3" />
-                <span>Datos guardados en la nube</span>
-              </div>
+              <h1 className="text-2xl font-black tracking-tight uppercase">Glosario Corporativo de Sofía</h1>
             </div>
           </div>
-          <div className="flex gap-2">
-            <button 
-              onClick={exportToCSV}
-              className="flex items-center gap-2 bg-indigo-600/50 hover:bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-white/20"
-            >
-              <Download className="w-4 h-4" />
-              Exportar CSV
-            </button>
-            <button 
-              onClick={() => {
-                setEditingId(null);
-                setFormData({ term: '', definition: '', status: 'defined' });
-                setIsModalOpen(true);
-              }}
-              className="flex items-center gap-2 bg-white text-indigo-700 px-4 py-2 rounded-lg font-bold hover:bg-indigo-50 transition-all shadow-md active:scale-95"
-            >
-              <Plus className="w-5 h-5" />
-              Nueva Palabra
-            </button>
-          </div>
+          <button 
+            onClick={() => { setEditingId(null); setFormData({ term: '', definition: '', status: 'defined' }); setIsModalOpen(true); }}
+            className="w-full sm:w-auto flex items-center justify-center gap-2 bg-white text-emerald-700 px-8 py-4 rounded-2xl font-black hover:bg-emerald-50 transition-all shadow-lg active:scale-95 uppercase text-sm tracking-widest border-b-4 border-emerald-100"
+          >
+            <Plus className="w-5 h-5" /> Nueva Palabra
+          </button>
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto p-4 mt-4">
-        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 mb-6">
-          <div className="relative mb-4">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
+      <main className="max-w-4xl mx-auto p-4 sm:p-6 -mt-4">
+        {/* Panel de Control */}
+        <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-emerald-100 mb-8">
+          <div className="relative mb-6">
+            <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-emerald-300 w-5 h-5" />
             <input 
               type="text" 
-              placeholder="Buscar término o definición..." 
+              placeholder="¿Qué palabra estás buscando?" 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+              className="w-full pl-14 pr-6 py-4 rounded-2xl border border-emerald-50 bg-emerald-50/20 focus:bg-white focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all text-lg font-medium placeholder:text-emerald-200"
             />
           </div>
-          <div className="flex gap-2 overflow-x-auto pb-1">
+          
+          <div className="flex flex-wrap gap-3">
             {[
               { id: 'all', label: 'Todo', count: words.length },
-              { id: 'defined', label: 'Definidas', count: words.filter(w => w.status === 'defined').length },
-              { id: 'pending', label: 'Por Investigar', count: words.filter(w => w.status === 'pending').length }
+              { id: 'defined', label: 'Definidas', count: words.length - pendingCount },
+              { id: 'pending', label: 'Dudas', count: pendingCount }
             ].map(btn => (
               <button 
                 key={btn.id}
                 onClick={() => setFilter(btn.id)}
-                className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap uppercase tracking-wider transition-all ${filter === btn.id ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                className={`flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
+                  filter === btn.id 
+                  ? `bg-emerald-600 text-white shadow-md shadow-emerald-200` 
+                  : 'bg-emerald-50 text-emerald-500 hover:bg-emerald-100'
+                }`}
               >
-                {btn.label} • {btn.count}
+                {btn.label}
+                <span className={`px-2 py-0.5 rounded-md ${filter === btn.id ? 'bg-white/20' : 'bg-emerald-200/50'}`}>
+                  {btn.count}
+                </span>
               </button>
             ))}
           </div>
         </div>
 
-        <div className="grid gap-3">
+        {/* Lista de Palabras */}
+        <div className="grid gap-4">
           {filteredWords.length === 0 ? (
-            <div className="text-center py-20 bg-white rounded-3xl border-2 border-dashed border-slate-200">
-              <Book className="w-12 h-12 text-slate-200 mx-auto mb-3" />
-              <p className="text-slate-400">No se encontraron términos en esta categoría.</p>
+            <div className="text-center py-24 bg-white rounded-[3rem] border-2 border-dashed border-emerald-100">
+              <AlertCircle className="w-12 h-12 text-emerald-100 mx-auto mb-4" />
+              <p className="text-emerald-300 font-bold uppercase tracking-widest text-xs">Aún no hay nada por aquí</p>
             </div>
           ) : (
             filteredWords.map((word) => (
-              <div key={word.id} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 hover:border-indigo-200 transition-all group relative overflow-hidden">
-                {word.status === 'pending' && <div className="absolute top-0 left-0 w-1.5 h-full bg-amber-400" />}
-                <div className="flex justify-between items-start">
+              <div key={word.id} className="bg-white p-6 rounded-[2rem] shadow-sm border border-emerald-50 hover:shadow-xl hover:shadow-emerald-500/5 transition-all group relative overflow-hidden text-left">
+                {word.status === 'pending' && <div className="absolute top-0 left-0 w-2 h-full bg-amber-400" />}
+                
+                <div className="flex justify-between items-start gap-4">
                   <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h3 className="text-lg font-bold text-slate-800">{word.term}</h3>
+                    <div className="flex items-center flex-wrap gap-2 mb-3">
+                      <h3 className="text-xl font-black text-slate-800 tracking-tight group-hover:text-emerald-600 transition-colors">{word.term}</h3>
                       {word.status === 'pending' && (
-                        <span className="flex items-center gap-1 text-[10px] font-black uppercase bg-amber-100 text-amber-700 px-2 py-0.5 rounded">
-                          <Clock className="w-3 h-3" /> Pendiente
+                        <span className="flex items-center gap-1 text-[9px] font-black uppercase bg-amber-50 text-amber-600 px-2 py-1 rounded-lg">
+                          <Clock className="w-3 h-3" /> Falta definir
                         </span>
                       )}
                     </div>
-                    <p className={`${word.status === 'pending' ? 'text-slate-400 italic' : 'text-slate-600'} text-sm leading-relaxed`}>
-                      {word.definition || "Sin definición. Haz clic en editar para agregar una."}
+                    <p className={`${word.status === 'pending' ? 'text-emerald-300 italic' : 'text-slate-600'} leading-relaxed text-base`}>
+                      {word.definition || "Anotamos este concepto para explicarlo pronto."}
                     </p>
                   </div>
-                  <div className="flex gap-1 ml-4 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                  
+                  <div className="flex gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all">
                     <button 
-                      onClick={() => {
-                        setEditingId(word.id);
-                        setFormData({ term: word.term, definition: word.definition || '', status: word.status });
-                        setIsModalOpen(true);
-                      }}
-                      className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
+                      onClick={() => { setEditingId(word.id); setFormData({ term: word.term, definition: word.definition || '', status: word.status }); setIsModalOpen(true); }}
+                      className="p-3 text-emerald-300 hover:text-emerald-600 hover:bg-emerald-50 rounded-2xl transition-all"
                     >
-                      <Edit3 className="w-4 h-4" />
+                      <Edit3 className="w-5 h-5" />
                     </button>
                     <button 
                       onClick={() => handleDelete(word.id)}
-                      className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
+                      className="p-3 text-emerald-200 hover:text-red-500 hover:bg-red-50 rounded-2xl transition-all"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="w-5 h-5" />
                     </button>
                   </div>
                 </div>
@@ -257,53 +228,48 @@ export default function App() {
         </div>
       </main>
 
+      {/* Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden">
-            <div className="p-6 border-b border-slate-50 flex justify-between items-center">
-              <h2 className="text-xl font-bold text-slate-800">{editingId ? 'Editar Término' : 'Nuevo Término'}</h2>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1"><X /></button>
+        <div className="fixed inset-0 bg-emerald-900/40 backdrop-blur-md flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-[3rem] w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in duration-300">
+            <div className="p-8 border-b border-emerald-50 flex justify-between items-center bg-emerald-50/50">
+              <h2 className="text-2xl font-black text-slate-800 tracking-tight">{editingId ? 'Editar concepto' : 'Agregar algo nuevo'}</h2>
+              <button onClick={() => setIsModalOpen(false)} className="text-emerald-300 hover:bg-emerald-100 p-2 rounded-full transition-all"><X /></button>
             </div>
-            <form onSubmit={handleSave} className="p-6 space-y-4">
-              <div>
-                <label className="block text-xs font-black uppercase text-slate-500 mb-1 tracking-widest">Palabra / Siglas</label>
+            <form onSubmit={handleSave} className="p-8 space-y-8">
+              <div className="text-left">
+                <label className="block text-[10px] font-black uppercase text-emerald-400 mb-2 tracking-[0.2em]">Palabra o siglas</label>
                 <input 
                   type="text" required value={formData.term}
                   onChange={(e) => setFormData({...formData, term: e.target.value})}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none"
-                  placeholder="Ej: KPI, SEO, Core Business..."
+                  className="w-full px-6 py-4 rounded-2xl border border-emerald-50 bg-emerald-50/30 focus:bg-white focus:ring-4 focus:ring-emerald-500/10 outline-none text-lg font-bold text-slate-800"
+                  placeholder="¿Cómo se llama el término?"
                 />
               </div>
-              <div>
-                <div className="flex justify-between mb-1">
-                  <label className="block text-xs font-black uppercase text-slate-500 tracking-widest">Significado</label>
-                  <button 
-                    type="button" 
-                    onClick={() => setFormData({...formData, definition: '', status: 'pending'})}
-                    className="text-[10px] text-amber-600 font-bold hover:underline"
-                  >
-                    Marcar como pendiente
-                  </button>
+              <div className="text-left">
+                <div className="flex justify-between items-center mb-2">
+                  <label className="block text-[10px] font-black uppercase text-emerald-400 tracking-[0.2em]">¿Qué significa?</label>
+                  <span className="text-[9px] font-bold text-emerald-200 italic">Puedes dejarlo en blanco si no lo sabes aún</span>
                 </div>
                 <textarea 
                   value={formData.definition}
-                  onChange={(e) => setFormData({...formData, definition: e.target.value, status: 'defined'})}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none h-32 resize-none"
-                  placeholder={formData.status === 'pending' ? 'Este término aparecerá como "Por investigar"...' : 'Escribe la definición aquí...'}
+                  onChange={(e) => setFormData({...formData, definition: e.target.value})}
+                  className="w-full px-6 py-4 rounded-2xl border border-emerald-50 bg-emerald-50/30 focus:bg-white focus:ring-4 focus:ring-emerald-500/10 outline-none h-40 resize-none text-slate-600 leading-relaxed"
+                  placeholder="Escribe la explicación de forma sencilla..."
                 />
               </div>
-              <div className="flex gap-3 pt-2">
+              <div className="flex gap-4 pt-2">
                 <button 
                   type="button" onClick={() => setIsModalOpen(false)}
-                  className="flex-1 px-4 py-3 text-slate-500 font-bold hover:bg-slate-50 rounded-xl transition-all"
+                  className="flex-1 px-6 py-4 text-emerald-400 font-bold hover:bg-emerald-50 rounded-2xl transition-all"
                 >
                   Cancelar
                 </button>
                 <button 
                   type="submit"
-                  className="flex-[2] px-4 py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all active:scale-95"
+                  className="flex-[2] px-6 py-4 bg-emerald-600 text-white font-black rounded-2xl hover:bg-emerald-700 shadow-xl shadow-emerald-200 transition-all active:scale-95 uppercase tracking-widest text-sm border-b-4 border-emerald-800"
                 >
-                  {editingId ? 'Actualizar' : 'Guardar Término'}
+                  {editingId ? 'Actualizar' : 'Listo, guardar'}
                 </button>
               </div>
             </form>
